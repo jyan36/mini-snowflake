@@ -33,7 +33,7 @@ class SqlFeatureTest(unittest.TestCase):
     def test_planner_builds_aggregate(self) -> None:
         query = Parser().parse("select count(*) from people group by city")
         plan = LogicalPlanner().plan(query)
-        self.assertIsInstance(plan.input, Aggregate)
+        self.assertIsInstance(plan, Aggregate)
 
     def test_planner_builds_sort(self) -> None:
         query = Parser().parse("select name from people order by name desc")

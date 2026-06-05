@@ -142,7 +142,7 @@ class AggregateOperator:
             for index, expression in enumerate(self.group_by):
                 row[self._name(expression)] = key[index]
             for expression in self.aggregates:
-                row[self._name(expression)] = self._aggregate(expression, grouped_rows)
+                row[self._name(expression)] = self._aggregate(expression, grouped_rows, key)
             rows.append(row)
         if not rows:
             return Batch(())
@@ -150,7 +150,9 @@ class AggregateOperator:
         columns = tuple(Column(name, tuple(row[name] for row in rows)) for name in names)
         return Batch(columns)
 
-    def _aggregate(self, expression: object, rows: list[dict[str, object]]) -> object:
+    def _aggregate(self, expression: object, rows: list[dict[str, object]], key: tuple[object, ...]) -> object:
+        if isinstance(expression, Identifier):
+            return self._evaluate(expression, rows[0])
         if isinstance(expression, FunctionCall):
             name = expression.name.lower()
             if name == "count":

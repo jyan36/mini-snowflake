@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sql_parser.ast import Query
+from sql_parser.ast import FunctionCall, Query
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,9 +66,11 @@ class LogicalPlanner:
             plan = Join(plan, Scan(join.table.name), join.condition)
         if query.where is not None:
             plan = Filter(plan, query.where)
-        if query.group_by:
+        has_aggregate = query.group_by or any(isinstance(item.expression, FunctionCall) for item in query.select)
+        if has_aggregate:
             plan = Aggregate(plan, query.group_by, tuple(item.expression for item in query.select))
-        plan = Projection(plan, tuple(item.expression for item in query.select))
+        else:
+            plan = Projection(plan, tuple(item.expression for item in query.select))
         if query.order_by:
             plan = Sort(plan, tuple(item.expression for item in query.order_by))
         if query.ctes:
