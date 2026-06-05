@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sql_parser.ast import BinaryExpression, Identifier, Literal, Query, SelectItem, TableRef
+from sql_parser.ast import BinaryExpression, Identifier, Literal, Query, SelectItem, Star, TableRef
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,14 +40,33 @@ class Parser:
         return items
 
     def _parse_expression(self):
+        return self._parse_or()
+
+    def _parse_or(self):
+        expression = self._parse_and()
+        while self._match_keyword("OR"):
+            expression = BinaryExpression(expression, "OR", self._parse_and())
+        return expression
+
+    def _parse_and(self):
+        expression = self._parse_comparison()
+        while self._match_keyword("AND"):
+            expression = BinaryExpression(expression, "AND", self._parse_comparison())
+        return expression
+
+    def _parse_comparison(self):
         left = self._parse_primary()
         if self._match("OP"):
             operator = self._previous().text
+            if self._peek().kind == "OP" and self._peek().text == "=" and operator in {"<", ">"}:
+                operator += self._advance().text
             right = self._parse_primary()
             return BinaryExpression(left, operator, right)
         return left
 
     def _parse_primary(self):
+        if self._match("STAR"):
+            return Star()
         token = self._advance()
         if token.kind == "IDENT":
             return Identifier(token.text)
@@ -67,6 +86,10 @@ class Parser:
                 continue
             if char == ",":
                 tokens.append(Token("COMMA", char))
+                index += 1
+                continue
+            if char == "*":
+                tokens.append(Token("STAR", char))
                 index += 1
                 continue
             if char in "=<>":
@@ -91,7 +114,11 @@ class Parser:
                 end = index + 1
                 while end < len(sql) and (sql[end].isalnum() or sql[end] == "_"):
                     end += 1
-                tokens.append(Token("IDENT", sql[index:end]))
+                text = sql[index:end]
+                kind = "IDENT"
+                if text.upper() in {"AND", "OR", "AS"}:
+                    kind = "IDENT"
+                tokens.append(Token(kind, text))
                 index = end
                 continue
             raise ParseError(f"unexpected character {char!r}")
@@ -132,4 +159,3 @@ class Parser:
 
     def _previous(self) -> Token:
         return self._tokens[self._position - 1]
-

@@ -32,6 +32,11 @@ class Identifier(Expression):
 
 
 @dataclass(frozen=True, slots=True)
+class Star(Expression):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class Literal(Expression):
     value: Any
 
@@ -41,4 +46,3 @@ class BinaryExpression(Expression):
     left: Expression
     operator: str
     right: Expression
-

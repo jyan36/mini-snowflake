@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sql_parser.ast import BinaryExpression, Identifier, Literal
+from sql_parser.ast import BinaryExpression, Identifier, Literal, Star
 from storage import Batch, Column, Table
 
 
@@ -36,10 +36,20 @@ class FilterOperator:
             right = self._evaluate(expression.right, batch, index)
             if expression.operator == "=":
                 return left == right
+            if expression.operator == "!=":
+                return left != right
             if expression.operator == "<":
                 return left < right
             if expression.operator == ">":
                 return left > right
+            if expression.operator == "<=":
+                return left <= right
+            if expression.operator == ">=":
+                return left >= right
+            if expression.operator == "AND":
+                return bool(left) and bool(right)
+            if expression.operator == "OR":
+                return bool(left) or bool(right)
         raise ValueError(f"unsupported expression {expression!r}")
 
 
@@ -50,9 +60,15 @@ class ProjectionOperator:
     def execute(self, batch: Batch) -> Batch:
         columns = []
         for expression in self.expressions:
+            if isinstance(expression, Star):
+                columns.extend(
+                    Column(column.name, column.values)
+                    for column in batch.columns
+                )
+                continue
             if isinstance(expression, Identifier):
                 source = batch.column(expression.name)
-                columns.append(source.__class__(expression.name, source.values))
+                columns.append(Column(expression.name, source.values))
                 continue
             if isinstance(expression, Literal):
                 columns.append(Column("literal", tuple(expression.value for _ in range(batch.row_count))))

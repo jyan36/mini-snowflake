@@ -34,4 +34,3 @@ class LogicalPlanner:
             plan = Filter(plan, query.where)
         plan = Projection(plan, tuple(item.expression for item in query.select))
         return plan
-
