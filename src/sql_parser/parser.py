@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sql_parser.ast import BinaryExpression, Identifier, Literal, Query, SelectItem, Star, TableRef
+from sql_parser.ast import (
+    BinaryExpression,
+    Cte,
+    FunctionCall,
+    Identifier,
+    JoinClause,
+    Literal,
+    OrderItem,
+    Query,
+    SelectItem,
+    Star,
+    TableRef,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,20 +36,69 @@ class Parser:
         return query
 
     def _parse_query(self) -> Query:
+        ctes = ()
+        if self._match_keyword("WITH"):
+            ctes = self._parse_ctes()
         self._expect_keyword("SELECT")
         select_items = self._parse_select_list()
         self._expect_keyword("FROM")
         source = TableRef(self._expect("IDENT").text)
+        joins: list[JoinClause] = []
+        while self._match_keyword("JOIN"):
+            join_table = TableRef(self._expect("IDENT").text)
+            self._expect_keyword("ON")
+            joins.append(JoinClause(join_table, self._parse_expression()))
         where = None
         if self._match_keyword("WHERE"):
             where = self._parse_expression()
-        return Query(tuple(select_items), source, where)
+        group_by: tuple = ()
+        if self._match_keyword("GROUP"):
+            self._expect_keyword("BY")
+            group_by = self._parse_expression_list()
+        order_by: tuple = ()
+        if self._match_keyword("ORDER"):
+            self._expect_keyword("BY")
+            order_by = self._parse_order_list()
+        return Query(tuple(select_items), source, where, tuple(joins), group_by, order_by, ctes)
+
+    def _parse_ctes(self) -> tuple[Cte, ...]:
+        ctes = []
+        while True:
+            name = self._expect("IDENT").text
+            self._expect_keyword("AS")
+            self._expect("LPAREN")
+            query = self._parse_query()
+            self._expect("RPAREN")
+            ctes.append(Cte(name, query))
+            if not self._match("COMMA"):
+                break
+        return tuple(ctes)
 
     def _parse_select_list(self) -> list[SelectItem]:
         items = [SelectItem(self._parse_expression())]
         while self._match("COMMA"):
             items.append(SelectItem(self._parse_expression()))
         return items
+
+    def _parse_expression_list(self) -> tuple:
+        expressions = [self._parse_expression()]
+        while self._match("COMMA"):
+            expressions.append(self._parse_expression())
+        return tuple(expressions)
+
+    def _parse_order_list(self) -> tuple[OrderItem, ...]:
+        items = []
+        while True:
+            expression = self._parse_expression()
+            descending = False
+            if self._match_keyword("DESC"):
+                descending = True
+            elif self._match_keyword("ASC"):
+                descending = False
+            items.append(OrderItem(expression, descending))
+            if not self._match("COMMA"):
+                break
+        return tuple(items)
 
     def _parse_expression(self):
         return self._parse_or()
@@ -67,6 +128,19 @@ class Parser:
     def _parse_primary(self):
         if self._match("STAR"):
             return Star()
+        if self._peek().kind == "IDENT" and self._peek_next().kind == "LPAREN":
+            name = self._advance().text
+            self._expect("LPAREN")
+            arguments = []
+            if not self._match("RPAREN"):
+                if self._match("STAR"):
+                    arguments.append(Star())
+                else:
+                    arguments.append(self._parse_expression())
+                while self._match("COMMA"):
+                    arguments.append(self._parse_expression())
+                self._expect("RPAREN")
+            return FunctionCall(name, tuple(arguments))
         token = self._advance()
         if token.kind == "IDENT":
             return Identifier(token.text)
@@ -86,6 +160,14 @@ class Parser:
                 continue
             if char == ",":
                 tokens.append(Token("COMMA", char))
+                index += 1
+                continue
+            if char == "(":
+                tokens.append(Token("LPAREN", char))
+                index += 1
+                continue
+            if char == ")":
+                tokens.append(Token("RPAREN", char))
                 index += 1
                 continue
             if char == "*":
@@ -116,7 +198,7 @@ class Parser:
                     end += 1
                 text = sql[index:end]
                 kind = "IDENT"
-                if text.upper() in {"AND", "OR", "AS"}:
+                if text.upper() in {"AND", "OR", "AS", "WITH", "JOIN", "ON", "GROUP", "BY", "ORDER", "ASC", "DESC"}:
                     kind = "IDENT"
                 tokens.append(Token(kind, text))
                 index = end
@@ -151,6 +233,9 @@ class Parser:
 
     def _peek(self) -> Token:
         return self._tokens[self._position]
+
+    def _peek_next(self) -> Token:
+        return self._tokens[self._position + 1]
 
     def _advance(self) -> Token:
         token = self._tokens[self._position]

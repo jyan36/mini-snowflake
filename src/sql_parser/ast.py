@@ -9,6 +9,10 @@ class Query:
     select: tuple["SelectItem", ...]
     source: "TableRef"
     where: "Expression | None" = None
+    joins: tuple["JoinClause", ...] = ()
+    group_by: tuple["Expression", ...] = ()
+    order_by: tuple["OrderItem", ...] = ()
+    ctes: tuple["Cte", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +24,24 @@ class SelectItem:
 @dataclass(frozen=True, slots=True)
 class TableRef:
     name: str
+
+
+@dataclass(frozen=True, slots=True)
+class JoinClause:
+    table: "TableRef"
+    condition: "Expression"
+
+
+@dataclass(frozen=True, slots=True)
+class OrderItem:
+    expression: "Expression"
+    descending: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Cte:
+    name: str
+    query: Query
 
 
 class Expression:
@@ -34,6 +56,12 @@ class Identifier(Expression):
 @dataclass(frozen=True, slots=True)
 class Star(Expression):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class FunctionCall(Expression):
+    name: str
+    arguments: tuple[Expression, ...]
 
 
 @dataclass(frozen=True, slots=True)

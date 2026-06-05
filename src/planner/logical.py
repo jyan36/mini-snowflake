@@ -16,6 +16,12 @@ class Scan(LogicalPlan):
 
 
 @dataclass(frozen=True, slots=True)
+class CtePlan(LogicalPlan):
+    name: str
+    plan: LogicalPlan
+
+
+@dataclass(frozen=True, slots=True)
 class Filter(LogicalPlan):
     input: LogicalPlan
     predicate: object
@@ -27,10 +33,45 @@ class Projection(LogicalPlan):
     expressions: tuple[object, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class Join(LogicalPlan):
+    left: LogicalPlan
+    right: LogicalPlan
+    condition: object
+
+
+@dataclass(frozen=True, slots=True)
+class Aggregate(LogicalPlan):
+    input: LogicalPlan
+    group_by: tuple[object, ...]
+    aggregates: tuple[object, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Sort(LogicalPlan):
+    input: LogicalPlan
+    order_by: tuple[object, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class With(LogicalPlan):
+    ctes: tuple[tuple[str, LogicalPlan], ...]
+    input: LogicalPlan
+
+
 class LogicalPlanner:
     def plan(self, query: Query) -> LogicalPlan:
         plan: LogicalPlan = Scan(query.source.name)
+        for join in query.joins:
+            plan = Join(plan, Scan(join.table.name), join.condition)
         if query.where is not None:
             plan = Filter(plan, query.where)
+        if query.group_by:
+            plan = Aggregate(plan, query.group_by, tuple(item.expression for item in query.select))
         plan = Projection(plan, tuple(item.expression for item in query.select))
+        if query.order_by:
+            plan = Sort(plan, tuple(item.expression for item in query.order_by))
+        if query.ctes:
+            cte_plans = tuple((cte.name, self.plan(cte.query)) for cte in query.ctes)
+            plan = With(cte_plans, plan)
         return plan

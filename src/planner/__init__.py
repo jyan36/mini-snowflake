@@ -1,4 +1,4 @@
-from planner.logical import Filter, LogicalPlan, LogicalPlanner, Projection, Scan
+from planner.logical import Aggregate, Filter, Join, LogicalPlan, LogicalPlanner, Projection, Scan, Sort, With
+from planner.optimizer import Optimizer
 
-__all__ = ["Filter", "LogicalPlan", "LogicalPlanner", "Projection", "Scan"]
-
+__all__ = ["Aggregate", "Filter", "Join", "LogicalPlan", "LogicalPlanner", "Optimizer", "Projection", "Scan", "Sort", "With"]
