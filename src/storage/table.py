@@ -35,6 +35,20 @@ class Table:
     def batch(self) -> Batch:
         return Batch(self.columns)
 
+    def partitioned_batches(self, batch_size: int) -> list[Batch]:
+        if not self.columns:
+            return []
+        row_count = len(self.columns[0].values)
+        batches = []
+        for start in range(0, row_count, batch_size):
+            end = min(start + batch_size, row_count)
+            columns = tuple(
+                Column(column.name, column.values[start:end])
+                for column in self.columns
+            )
+            batches.append(Batch(columns))
+        return batches
+
 
 def from_rows(name: str, rows: list[dict[str, object]]) -> Table:
     if not rows:
@@ -45,4 +59,3 @@ def from_rows(name: str, rows: list[dict[str, object]]) -> Table:
         for column_name in column_names
     )
     return Table(name, columns)
-

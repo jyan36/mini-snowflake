@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from execution.operators import AggregateOperator, FilterOperator, JoinOperator, ProjectionOperator, ScanOperator, SortOperator
+from execution.scheduler import LocalScheduler
 from planner import Aggregate, Filter, Join, LogicalPlan, Optimizer, Projection, Scan, Sort, With
 from storage import Table
 
@@ -10,6 +11,7 @@ from storage import Table
 @dataclass(frozen=True, slots=True)
 class ExecutionEngine:
     optimizer: Optimizer = Optimizer()
+    scheduler: LocalScheduler = LocalScheduler()
 
     def execute(self, plan: LogicalPlan, tables: dict[str, Table]) -> list[dict[str, object]]:
         batch = self._execute_batch(self.optimizer.optimize(plan), tables)
@@ -39,6 +41,8 @@ class ExecutionEngine:
             right = self._execute_batch(plan.right, tables)
             return JoinOperator(plan.condition).execute(left, right)
         if isinstance(plan, Scan):
+            if self.scheduler.workers > 1:
+                return self.scheduler.scan(tables[plan.table])
             return ScanOperator(tables[plan.table]).execute()
         raise ValueError(f"unsupported plan {plan!r}")
 
