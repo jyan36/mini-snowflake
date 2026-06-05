@@ -27,3 +27,12 @@ class LogicalPlannerTest(unittest.TestCase):
         self.assertIsInstance(plan.input, Scan)
         self.assertEqual(plan.expressions, (Identifier("name"),))
 
+    def test_plan_with_join(self) -> None:
+        query = Parser().parse("select name from people join cities on people = cities")
+        plan = LogicalPlanner().plan(query)
+        self.assertEqual(plan.input.__class__.__name__, "Join")
+
+    def test_plan_with_group_by(self) -> None:
+        query = Parser().parse("select city, count(*) from people group by city")
+        plan = LogicalPlanner().plan(query)
+        self.assertEqual(plan.__class__.__name__, "Aggregate")

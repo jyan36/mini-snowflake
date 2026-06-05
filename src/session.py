@@ -12,7 +12,12 @@ class QuerySession:
     planner: LogicalPlanner = LogicalPlanner()
     optimizer: Optimizer = Optimizer()
 
-    def explain(self, sql: str) -> str:
+    def plan(self, sql: str):
         query = self.parser.parse(sql)
-        plan = self.optimizer.optimize(self.planner.plan(query))
-        return repr(plan)
+        return self.planner.plan(query)
+
+    def optimized_plan(self, sql: str):
+        return self.optimizer.optimize(self.plan(sql))
+
+    def explain(self, sql: str) -> str:
+        return repr(self.optimized_plan(sql))

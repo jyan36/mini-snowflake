@@ -28,3 +28,7 @@ class ParallelAggregateTest(unittest.TestCase):
         )
         self.assertEqual(sequential, parallel)
 
+    def test_parallel_count_summary_reports_parallel(self) -> None:
+        plan = LogicalPlanner().plan(Parser().parse("select city, count(*) from people group by city"))
+        engine = ExecutionEngine(scheduler=LocalScheduler(workers=2, batch_size=2))
+        self.assertIn("mode=parallel", engine.execution_summary(plan))

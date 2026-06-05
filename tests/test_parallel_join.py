@@ -37,3 +37,7 @@ class ParallelJoinTest(unittest.TestCase):
 
         self.assertEqual(sequential, parallel)
 
+    def test_parallel_join_summary_reports_parallel(self) -> None:
+        plan = LogicalPlanner().plan(Parser().parse("select name, city_name from people join cities on city_id = id"))
+        engine = ExecutionEngine(scheduler=LocalScheduler(workers=2, batch_size=2))
+        self.assertIn("mode=parallel", engine.execution_summary(plan))

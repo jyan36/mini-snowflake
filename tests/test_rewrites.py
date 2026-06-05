@@ -17,3 +17,7 @@ class RewriteTest(unittest.TestCase):
         self.assertIsInstance(plan, Projection)
         self.assertEqual(plan.expressions, (Identifier("name"),))
 
+    def test_constant_filter_collapses(self) -> None:
+        query = Parser().parse("select name from people where 1 = 1 and 2 = 2")
+        plan = Optimizer().optimize(LogicalPlanner().plan(query))
+        self.assertIn("Literal(value=True)", repr(plan.input.predicate))

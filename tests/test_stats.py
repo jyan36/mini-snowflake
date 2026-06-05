@@ -11,3 +11,6 @@ class StatsCatalogTest(unittest.TestCase):
 
         self.assertEqual(catalog.get("people"), stats)
 
+    def test_missing_table_returns_none(self) -> None:
+        catalog = StatsCatalog()
+        self.assertIsNone(catalog.get("missing"))
