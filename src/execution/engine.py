@@ -3,14 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from execution.operators import AggregateOperator, FilterOperator, JoinOperator, ProjectionOperator, ScanOperator, SortOperator
-from planner import Aggregate, Filter, Join, LogicalPlan, Projection, Scan, Sort, With
+from planner import Aggregate, Filter, Join, LogicalPlan, Optimizer, Projection, Scan, Sort, With
 from storage import Table
 
 
 @dataclass(frozen=True, slots=True)
 class ExecutionEngine:
+    optimizer: Optimizer = Optimizer()
+
     def execute(self, plan: LogicalPlan, tables: dict[str, Table]) -> list[dict[str, object]]:
-        batch = self._execute_batch(plan, tables)
+        batch = self._execute_batch(self.optimizer.optimize(plan), tables)
         return [batch.row(index) for index in range(batch.row_count)]
 
     def _execute_batch(self, plan: LogicalPlan, tables: dict[str, Table]):
