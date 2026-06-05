@@ -84,6 +84,7 @@ class ProjectionOperator:
 @dataclass(frozen=True, slots=True)
 class JoinOperator:
     condition: object
+    strategy: str = "hash"
 
     def execute(self, left: Batch, right: Batch) -> Batch:
         rows = []

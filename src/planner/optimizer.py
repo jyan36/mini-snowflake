@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from catalog import StatsCatalog
+from planner.cost import CostModel
 from planner.logical import Aggregate, Filter, Join, LogicalPlan, Projection, Scan, Sort, With
 from sql_parser.ast import BinaryExpression, Identifier, Literal, Query, SelectItem, Star
 
 
 @dataclass(frozen=True, slots=True)
 class Optimizer:
+    cost_model: CostModel = CostModel()
+    stats: StatsCatalog | None = None
+
     def optimize(self, plan: LogicalPlan) -> LogicalPlan:
         if isinstance(plan, Projection):
             input_plan = self.optimize(plan.input)
@@ -26,7 +31,10 @@ class Optimizer:
         if isinstance(plan, Sort):
             return Sort(self.optimize(plan.input), plan.order_by)
         if isinstance(plan, Join):
-            return Join(self.optimize(plan.left), self.optimize(plan.right), self._fold(plan.condition))
+            left = self.optimize(plan.left)
+            right = self.optimize(plan.right)
+            strategy = self._choose_join_strategy(left, right)
+            return Join(left, right, self._fold(plan.condition), strategy)
         if isinstance(plan, With):
             return With(tuple((name, self.optimize(cte_plan)) for name, cte_plan in plan.ctes), self.optimize(plan.input))
         return plan
@@ -80,6 +88,22 @@ class Optimizer:
                     return Literal(bool(left.value) or bool(right.value))
             return BinaryExpression(left, expression.operator, right)
         return expression
+
+    def _choose_join_strategy(self, left: LogicalPlan, right: LogicalPlan) -> str:
+        left_rows = self._estimate_rows(left)
+        right_rows = self._estimate_rows(right)
+        if min(left_rows, right_rows) <= 100:
+            return "broadcast"
+        if left_rows + right_rows > 10_000:
+            return "sort_merge"
+        return "hash"
+
+    def _estimate_rows(self, plan: LogicalPlan) -> float:
+        if isinstance(plan, Scan) and self.stats is not None:
+            table = self.stats.get(plan.table)
+            if table is not None:
+                return float(table.row_count)
+        return self.cost_model.estimate(plan).rows
 
     def optimize_query(self, query: Query) -> Query:
         select_items = tuple(self._optimize_select_item(item) for item in query.select)

@@ -38,6 +38,7 @@ class Join(LogicalPlan):
     left: LogicalPlan
     right: LogicalPlan
     condition: object
+    strategy: str = "hash"
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,3 +78,10 @@ class LogicalPlanner:
             cte_plans = tuple((cte.name, self.plan(cte.query)) for cte in query.ctes)
             plan = With(cte_plans, plan)
         return plan
+
+    def join_strategy(self, left_rows: float, right_rows: float) -> str:
+        if min(left_rows, right_rows) <= 100:
+            return "broadcast"
+        if left_rows + right_rows > 10_000:
+            return "sort_merge"
+        return "hash"
