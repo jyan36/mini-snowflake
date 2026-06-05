@@ -32,6 +32,8 @@ class ExecutionEngine:
             return SortOperator(plan.order_by).execute(batch)
         if isinstance(plan, Aggregate):
             batch = self._execute_batch(plan.input, tables)
+            if self.scheduler.workers > 1:
+                return self.scheduler.aggregate(batch, plan.group_by, plan.aggregates)
             return AggregateOperator(plan.group_by, plan.aggregates).execute(batch)
         if isinstance(plan, Filter):
             batch = self._execute_batch(plan.input, tables)
@@ -39,7 +41,7 @@ class ExecutionEngine:
         if isinstance(plan, Join):
             left = self._execute_batch(plan.left, tables)
             right = self._execute_batch(plan.right, tables)
-            return JoinOperator(plan.condition).execute(left, right)
+            return self.scheduler.join(left, right, plan.condition)
         if isinstance(plan, Scan):
             if self.scheduler.workers > 1:
                 return self.scheduler.scan(tables[plan.table])
