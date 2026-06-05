@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mini_snowflake.session import QuerySession
+from session import QuerySession
 
 
 def run_repl(session: QuerySession) -> int:

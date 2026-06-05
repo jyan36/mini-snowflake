@@ -1,6 +1,6 @@
 import unittest
 
-from mini_snowflake.session import QuerySession
+from session import QuerySession
 
 
 class QuerySessionTest(unittest.TestCase):

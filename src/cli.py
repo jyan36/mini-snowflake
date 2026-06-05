@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from mini_snowflake.repl import run_repl
-from mini_snowflake.session import QuerySession
+from repl import run_repl
+from session import QuerySession
 
 
 def build_parser() -> argparse.ArgumentParser:
