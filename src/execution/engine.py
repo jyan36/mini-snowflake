@@ -13,9 +13,16 @@ class ExecutionEngine:
     optimizer: Optimizer = Optimizer()
     scheduler: LocalScheduler = LocalScheduler()
 
+    @property
+    def execution_mode(self) -> str:
+        return "parallel" if self.scheduler.workers > 1 else "sequential"
+
     def execute(self, plan: LogicalPlan, tables: dict[str, Table]) -> list[dict[str, object]]:
         batch = self._execute_batch(self.optimizer.optimize(plan), tables)
         return [batch.row(index) for index in range(batch.row_count)]
+
+    def execution_summary(self, plan: LogicalPlan) -> str:
+        return f"mode={self.execution_mode} workers={self.scheduler.workers} plan={type(plan).__name__}"
 
     def _execute_batch(self, plan: LogicalPlan, tables: dict[str, Table]):
         if isinstance(plan, With):
