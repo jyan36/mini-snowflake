@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from multiprocessing import get_context
 
 from distributed.protocol import Task
-from distributed.transport import QueueTransport
+from distributed.transport import PipeTransport, QueueTransport
 from distributed.worker import Worker
 from distributed.shuffle import ShuffleExchange
 from sql_parser import Parser
@@ -15,7 +15,7 @@ from storage import Batch, Column, Table, from_rows
 @dataclass
 class ProcessWorkerHandle:
     worker_id: str
-    transport: QueueTransport
+    transport: PipeTransport
     process: object
     tables: dict[str, Table] | None = None
 
@@ -30,10 +30,11 @@ class ProcessWorkerPool:
     _context: object = field(default_factory=lambda: _best_context())
 
     def add_worker(self, worker_id: str, tables: dict[str, object]) -> ProcessWorkerHandle:
-        task_queue = self._context.Queue()
-        result_queue = self._context.Queue()
-        transport = QueueTransport(task_queue, result_queue)
-        process = self._context.Process(target=_worker_main, args=(worker_id, transport, tables), daemon=True)
+        task_parent, task_child = self._context.Pipe()
+        result_parent, result_child = self._context.Pipe()
+        transport = PipeTransport(task_parent, result_parent)
+        worker_transport = PipeTransport(task_child, result_child)
+        process = self._context.Process(target=_worker_main, args=(worker_id, worker_transport, tables), daemon=True)
         process.start()
         handle = ProcessWorkerHandle(worker_id, transport, process, tables)
         self.workers[worker_id] = handle

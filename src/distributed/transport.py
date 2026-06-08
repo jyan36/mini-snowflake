@@ -55,3 +55,27 @@ class QueueTransport:
             return self.result_queue.get_nowait()
         except Empty:
             return None
+
+
+@dataclass
+class PipeTransport:
+    task_pipe: Any
+    result_pipe: Any
+
+    def send_task(self, task: Task | None) -> None:
+        self.task_pipe.send(task)
+
+    def receive_task(self, block: bool = False, timeout: float | None = None) -> Task | None:
+        if block:
+            return self.task_pipe.recv()
+        if self.task_pipe.poll(timeout) if timeout is not None else self.task_pipe.poll():
+            return self.task_pipe.recv()
+        return None
+
+    def send_result(self, result: TaskResult) -> None:
+        self.result_pipe.send(result)
+
+    def receive_result(self) -> TaskResult | None:
+        if self.result_pipe.poll():
+            return self.result_pipe.recv()
+        return None
