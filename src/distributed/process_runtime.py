@@ -136,7 +136,7 @@ class ProcessWorkerPool:
                     "execute_sql",
                     {
                         "sql": sql,
-                        "tables": partitions[index % len(partitions)],
+                        "tables": self._tables_payload(partitions[index % len(partitions)]),
                     },
                 )
             )
@@ -158,7 +158,7 @@ class ProcessWorkerPool:
                     "execute_sql",
                     {
                         "sql": sql,
-                        "tables": handle.tables or {},
+                        "tables": self._tables_payload(handle.tables or {}),
                     },
                 )
             )
@@ -228,6 +228,9 @@ class ProcessWorkerPool:
         if rows:
             return from_rows(name, rows)
         return Table(name, tuple(Column(column.name, tuple()) for column in columns))
+
+    def _tables_payload(self, tables: dict[str, Table]) -> dict[str, object]:
+        return {name: table.to_payload() for name, table in tables.items()}
 
 
 def _worker_main(worker_id: str, transport: QueueTransport, tables: dict[str, object]) -> None:

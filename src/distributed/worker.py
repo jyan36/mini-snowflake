@@ -48,7 +48,7 @@ class Worker:
         if task.kind == "execute_sql":
             sql = str(task.payload["sql"])
             table_payload = task.payload.get("tables", {})
-            tables = dict(table_payload.items()) if table_payload else dict(self.tables or {})
+            tables = self._decode_tables(table_payload) if table_payload else dict(self.tables or {})
             query = Parser().parse(sql)
             plan = LogicalPlanner().plan(query)
             rows = RowExecutor().execute(plan, tables)
@@ -83,3 +83,12 @@ class Worker:
         if self.tables is None or table_name not in self.tables:
             raise KeyError(table_name)
         return self.tables[table_name]
+
+    def _decode_tables(self, payload: dict[str, object]) -> dict[str, Table]:
+        tables: dict[str, Table] = {}
+        for name, table_payload in payload.items():
+            if isinstance(table_payload, Table):
+                tables[name] = table_payload
+            else:
+                tables[name] = Table.from_payload(dict(table_payload))
+        return tables

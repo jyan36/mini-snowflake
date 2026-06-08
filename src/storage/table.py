@@ -49,6 +49,24 @@ class Table:
             batches.append(Batch(columns))
         return batches
 
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "columns": [
+                {"name": column.name, "values": list(column.values)}
+                for column in self.columns
+            ],
+        }
+
+    @staticmethod
+    def from_payload(payload: dict[str, object]) -> "Table":
+        name = str(payload["name"])
+        columns = tuple(
+            Column(str(column["name"]), tuple(column["values"]))
+            for column in payload.get("columns", [])
+        )
+        return Table(name, columns)
+
 
 def from_rows(name: str, rows: list[dict[str, object]]) -> Table:
     if not rows:
