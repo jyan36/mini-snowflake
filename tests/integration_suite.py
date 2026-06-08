@@ -2,10 +2,12 @@ import unittest
 
 from tests import (
     test_distributed_execution,
+    test_distributed_checkpoint,
     test_distributed_queries,
     test_distributed_protocol,
     test_distributed_shuffle,
     test_distributed_validation,
+    test_failure_validation,
     test_integration,
     test_query_matrix,
     test_sql_features,
@@ -21,8 +23,10 @@ def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: 
         test_distributed_protocol,
         test_distributed_execution,
         test_distributed_shuffle,
+        test_distributed_checkpoint,
         test_distributed_queries,
         test_distributed_validation,
+        test_failure_validation,
     ):
         suite.addTests(loader.loadTestsFromModule(module))
     return suite
