@@ -23,3 +23,9 @@ class TaskStatus:
     state: str
     message: str = ""
 
+
+@dataclass(frozen=True)
+class Heartbeat:
+    worker_id: str
+    healthy: bool = True
+    message: str = ""

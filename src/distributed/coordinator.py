@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from distributed.protocol import Task, TaskResult
+from distributed.protocol import Heartbeat, Task, TaskResult
 from distributed.shuffle import ShuffleExchange
 from distributed.transport import LocalTransport
 from distributed.worker import Worker
@@ -12,10 +12,12 @@ from distributed.worker import Worker
 class Coordinator:
     transport: LocalTransport = field(default_factory=LocalTransport)
     workers: dict[str, Worker] = field(default_factory=dict)
+    worker_health: dict[str, Heartbeat] = field(default_factory=dict)
 
     def register_worker(self, worker_id: str) -> Worker:
         worker = Worker(worker_id, self.transport, {})
         self.workers[worker_id] = worker
+        self.worker_health[worker_id] = Heartbeat(worker_id, True, "registered")
         return worker
 
     def submit(self, kind: str, payload: dict[str, object]) -> Task:
@@ -75,6 +77,14 @@ class Coordinator:
         for worker in self.workers.values():
             worker.execute()
         return self.collect()
+
+    def refresh_health(self) -> dict[str, Heartbeat]:
+        for worker_id, worker in self.workers.items():
+            self.worker_health[worker_id] = worker.heartbeat()
+        return dict(self.worker_health)
+
+    def healthy_workers(self) -> list[str]:
+        return [worker_id for worker_id, heartbeat in self.worker_health.items() if heartbeat.healthy]
 
     def _rows_to_batch(self, rows: list[dict[str, object]]):
         from storage import from_rows

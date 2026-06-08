@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from distributed.protocol import Task, TaskResult
+from distributed.protocol import Heartbeat, Task, TaskResult
 from distributed.transport import LocalTransport
 from storage import Table
 
@@ -16,6 +16,9 @@ class Worker:
 
     def poll(self) -> Task | None:
         return self.transport.receive_task()
+
+    def heartbeat(self) -> Heartbeat:
+        return Heartbeat(self.worker_id, True, "alive")
 
     def execute(self) -> TaskResult | None:
         task = self.poll()
