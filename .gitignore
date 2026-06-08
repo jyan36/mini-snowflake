@@ -6,3 +6,4 @@ build/
 *.pyc
 benchmark_out/
 benchmark_out_new/
+benchmark_out_mp_small/

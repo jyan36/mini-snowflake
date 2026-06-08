@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from distributed import Coordinator
+from distributed import Coordinator, ProcessWorkerPool
 from execution import ExecutionEngine, RowExecutor
 from execution.scheduler import LocalScheduler
 from planner import LogicalPlanner
@@ -71,11 +71,20 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table, config: Benc
     worker_a.tables["cities"] = cities_table
     worker_b.tables["people"] = people_table
     worker_b.tables["cities"] = cities_table
+    process_pool = ProcessWorkerPool()
+    process_pool.add_worker("worker-a", {"people": people_table, "cities": cities_table})
+    process_pool.add_worker("worker-b", {"people": people_table, "cities": cities_table})
 
     row_based = _measure(lambda: row_executor.execute(plan, {"people": people_table, "cities": cities_table}), config)
     sequential = _measure(lambda: sequential_engine.execute(plan, {"people": people_table, "cities": cities_table}), config)
     parallel = _measure(lambda: parallel_engine.execute(plan, {"people": people_table, "cities": cities_table}), config)
     distributed = _measure(lambda: _run_distributed(coordinator, case.sql, people_table, cities_table), config)
+    process_distributed = (
+        _measure(lambda: _run_distributed_process_pool(process_pool, case.sql, people_table, cities_table), config)
+        if _supports_process_distributed(case.sql)
+        else distributed
+    )
+    process_pool.stop_all()
 
     return {
         "name": case.name,
@@ -83,13 +92,16 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table, config: Benc
         "sequential_ms": sequential[0],
         "parallel_ms": parallel[0],
         "distributed_ms": distributed[0],
+        "process_distributed_ms": process_distributed[0],
         "row_speedup": _speedup(row_based[0], sequential[0]),
         "parallel_speedup": _speedup(row_based[0], parallel[0]),
         "distributed_speedup": _speedup(row_based[0], distributed[0]),
+        "process_distributed_speedup": _speedup(row_based[0], process_distributed[0]),
         "row_rows": row_based[1],
         "sequential_rows": sequential[1],
         "parallel_rows": parallel[1],
         "distributed_rows": distributed[1],
+        "process_distributed_rows": process_distributed[1],
     }
 
 
@@ -107,6 +119,27 @@ def _run_distributed(coordinator: Coordinator, sql: str, people_table, cities_ta
         rows = [people_table.batch().row(i) for i in range(people_table.batch().row_count)]
         return coordinator.distributed_count(rows, "city")
     return ExecutionEngine().execute(LogicalPlanner().plan(query), {"people": people_table, "cities": cities_table})
+
+
+def _run_distributed_process_pool(process_pool: ProcessWorkerPool, sql: str, people_table, cities_table):
+    if "join" in sql.lower():
+        return process_pool.distributed_join(
+            [people_table.batch().row(i) for i in range(people_table.batch().row_count)],
+            [cities_table.batch().row(i) for i in range(cities_table.batch().row_count)],
+            "city_id",
+            "id",
+        )
+    if "count(*)" in sql.lower():
+        return process_pool.distributed_count(
+            [people_table.batch().row(i) for i in range(people_table.batch().row_count)],
+            "city",
+        )
+    return ExecutionEngine().execute(LogicalPlanner().plan(Parser().parse(sql)), {"people": people_table, "cities": cities_table})
+
+
+def _supports_process_distributed(sql: str) -> bool:
+    lowered = sql.lower()
+    return "join" in lowered or "count(*)" in lowered
 
 
 def _measure(fn, config: BenchmarkConfig):

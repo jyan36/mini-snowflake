@@ -24,9 +24,22 @@ class Worker:
         task = self.poll()
         if task is None:
             return None
+        if task.kind == "stop":
+            return TaskResult(task.task_id, "stopped", {"worker_id": self.worker_id})
         result = TaskResult(task.task_id, "completed", {"worker_id": self.worker_id, **self._execute_task(task)})
         self.transport.send_result(result)
         return result
+
+    def run_forever(self) -> None:
+        while True:
+            task = self.transport.receive_task(block=True)
+            if task is None:
+                continue
+            if task.kind == "stop":
+                self.transport.send_result(TaskResult(task.task_id, "stopped", {"worker_id": self.worker_id}))
+                return
+            result = TaskResult(task.task_id, "completed", {"worker_id": self.worker_id, **self._execute_task(task)})
+            self.transport.send_result(result)
 
     def _execute_task(self, task: Task) -> dict[str, Any]:
         if task.kind == "scan":
