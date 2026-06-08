@@ -7,7 +7,7 @@ from storage import Batch, Table
 
 
 class LocalScheduler:
-    def __init__(self, workers: int = 1, batch_size: int = 2) -> None:
+    def __init__(self, workers: int = 1, batch_size: int = 4096) -> None:
         self.workers = max(1, workers)
         self.batch_size = max(1, batch_size)
 

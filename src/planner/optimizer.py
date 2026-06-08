@@ -16,16 +16,12 @@ class Optimizer:
     def optimize(self, plan: LogicalPlan) -> LogicalPlan:
         if isinstance(plan, Projection):
             input_plan = self.optimize(plan.input)
-            input_plan = self._pushdown_projection(input_plan, plan.expressions)
-            if isinstance(input_plan, Projection):
-                return Projection(input_plan.input, plan.expressions)
+            input_plan = self._pushdown_projection(input_plan, self._required_columns(plan.expressions))
             return Projection(input_plan, plan.expressions)
         if isinstance(plan, Filter):
             input_plan = self.optimize(plan.input)
             predicate = self._fold(plan.predicate)
-            if isinstance(input_plan, Projection):
-                return Projection(Filter(input_plan.input, predicate), input_plan.expressions)
-            return Filter(input_plan, predicate)
+            return self._pushdown_filter(input_plan, predicate)
         if isinstance(plan, Aggregate):
             return Aggregate(self.optimize(plan.input), plan.group_by, plan.aggregates)
         if isinstance(plan, Sort):
@@ -39,17 +35,41 @@ class Optimizer:
             return With(tuple((name, self.optimize(cte_plan)) for name, cte_plan in plan.ctes), self.optimize(plan.input))
         return plan
 
-    def _pushdown_projection(self, input_plan: LogicalPlan, expressions: tuple[object, ...]) -> LogicalPlan:
-        if isinstance(input_plan, Filter):
-            return Filter(self._pushdown_projection(input_plan.input, expressions), input_plan.predicate)
-        if isinstance(input_plan, Join):
-            required = self._required_columns(expressions)
-            left_columns = self._columns_for(input_plan.left)
-            right_columns = self._columns_for(input_plan.right)
-            if required & left_columns:
-                input_plan = Join(self._pushdown_projection(input_plan.left, tuple(Identifier(name) for name in sorted(required & left_columns))), self._pushdown_projection(input_plan.right, tuple(Identifier(name) for name in sorted(required & right_columns))), input_plan.condition)
+    def _pushdown_projection(self, input_plan: LogicalPlan, required: set[str]) -> LogicalPlan:
+        if not required:
             return input_plan
+        if isinstance(input_plan, Projection):
+            inner_required = required | self._required_columns(input_plan.expressions)
+            return Projection(self._pushdown_projection(input_plan.input, inner_required), input_plan.expressions)
+        if isinstance(input_plan, Filter):
+            inner_required = required | self._required_columns((input_plan.predicate,))
+            return Filter(self._pushdown_projection(input_plan.input, inner_required), input_plan.predicate)
+        if isinstance(input_plan, Join):
+            join_required = required | self._required_columns((input_plan.condition,))
+            left_required = self._required_columns_for_branch(input_plan.left, join_required)
+            right_required = self._required_columns_for_branch(input_plan.right, join_required)
+            return Join(
+                self._pushdown_projection(input_plan.left, left_required),
+                self._pushdown_projection(input_plan.right, right_required),
+                input_plan.condition,
+                input_plan.strategy,
+            )
+        if isinstance(input_plan, Aggregate):
+            inner_required = required | self._required_columns(input_plan.group_by + input_plan.aggregates)
+            return Aggregate(self._pushdown_projection(input_plan.input, inner_required), input_plan.group_by, input_plan.aggregates)
+        if isinstance(input_plan, Sort):
+            inner_required = required | self._required_columns(input_plan.order_by)
+            return Sort(self._pushdown_projection(input_plan.input, inner_required), input_plan.order_by)
+        if isinstance(input_plan, Scan):
+            return Projection(input_plan, tuple(Identifier(name) for name in sorted(required)))
         return input_plan
+
+    def _pushdown_filter(self, input_plan: LogicalPlan, predicate: object) -> LogicalPlan:
+        if isinstance(input_plan, Projection):
+            return Projection(self._pushdown_filter(input_plan.input, predicate), input_plan.expressions)
+        if isinstance(input_plan, Join):
+            return Filter(input_plan, predicate)
+        return Filter(input_plan, predicate)
 
     def _required_columns(self, expressions: tuple[object, ...]) -> set[str]:
         required: set[str] = set()
@@ -58,12 +78,24 @@ class Optimizer:
                 required.add(expression.name)
             if isinstance(expression, BinaryExpression):
                 required |= self._required_columns((expression.left, expression.right))
+            if isinstance(expression, FunctionCall):
+                required |= self._required_columns(expression.arguments)
         return required
 
-    def _columns_for(self, plan: LogicalPlan) -> set[str]:
+    def _required_columns_for_branch(self, plan: LogicalPlan, required: set[str]) -> set[str]:
         if isinstance(plan, Scan):
-            return set()
-        return set()
+            return set(required)
+        if isinstance(plan, Projection):
+            return self._required_columns(plan.expressions) | required
+        if isinstance(plan, Filter):
+            return self._required_columns((plan.predicate,)) | required
+        if isinstance(plan, Join):
+            return self._required_columns((plan.condition,)) | required
+        if isinstance(plan, Aggregate):
+            return self._required_columns(plan.group_by + plan.aggregates) | required
+        if isinstance(plan, Sort):
+            return self._required_columns(plan.order_by) | required
+        return set(required)
 
     def _fold(self, expression: object) -> object:
         if isinstance(expression, BinaryExpression):
