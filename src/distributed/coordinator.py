@@ -78,6 +78,20 @@ class Coordinator:
             worker.execute()
         return self.collect()
 
+    def execute_with_retry(self, kind: str, payload: dict[str, object], retries: int = 1) -> TaskResult:
+        healthy_workers = self.healthy_workers()
+        if not healthy_workers:
+            raise RuntimeError("no healthy workers available")
+        task = self.submit(kind, payload)
+        for attempt in range(retries + 1):
+            worker = self.workers[healthy_workers[attempt % len(healthy_workers)]]
+            try:
+                return self._execute_on_worker(worker, task)
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                self.worker_health[worker.worker_id] = Heartbeat(worker.worker_id, False, str(exc))
+                continue
+        raise RuntimeError(f"task {task.task_id} failed after retries")
+
     def refresh_health(self) -> dict[str, Heartbeat]:
         for worker_id, worker in self.workers.items():
             self.worker_health[worker_id] = worker.heartbeat()
@@ -90,6 +104,13 @@ class Coordinator:
         from storage import from_rows
 
         return from_rows("distributed", rows).batch()
+
+    def _execute_on_worker(self, worker: Worker, task: Task) -> TaskResult:
+        worker.transport.send_task(task)
+        result = worker.execute()
+        if result is None:
+            raise RuntimeError("worker produced no result")
+        return result
 
     def _join_locally(
         self,
