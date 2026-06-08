@@ -18,4 +18,4 @@ class BenchmarkReportTest(unittest.TestCase):
         self.assertIn("# Benchmark Report", report)
         self.assertIn("join", report)
         self.assertIn("Row", report)
-
+        self.assertIn("Speedup", report)

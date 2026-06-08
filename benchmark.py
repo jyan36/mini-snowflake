@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import argparse
 import statistics
 import sys
 import time
@@ -23,12 +24,12 @@ class BenchmarkCase:
 
 @dataclass(frozen=True)
 class BenchmarkConfig:
-    people_size: int = 50_000
+    people_size: int = 500_000
     warmup_runs: int = 1
-    sample_runs: int = 5
+    sample_runs: int = 3
 
 
-def build_people_table(size: int = 50_000):
+def build_people_table(size: int = 500_000):
     rows = []
     for index in range(size):
         rows.append(
@@ -38,6 +39,8 @@ def build_people_table(size: int = 50_000):
                 "age": 10 + (index % 50),
                 "city_id": 100 if index % 2 == 0 else 200,
                 "city": "seattle" if index % 2 == 0 else "vancouver",
+                "score": (index * 17) % 10_000,
+                "segment": f"segment-{index % 8}",
             }
         )
     return from_rows("people", rows)
@@ -80,6 +83,9 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table, config: Benc
         "sequential_ms": sequential[0],
         "parallel_ms": parallel[0],
         "distributed_ms": distributed[0],
+        "row_speedup": _speedup(row_based[0], sequential[0]),
+        "parallel_speedup": _speedup(row_based[0], parallel[0]),
+        "distributed_speedup": _speedup(row_based[0], distributed[0]),
         "row_rows": row_based[1],
         "sequential_rows": sequential[1],
         "parallel_rows": parallel[1],
@@ -121,12 +127,23 @@ def _time_call(fn):
 
 
 def main(argv: list[str] | None = None) -> int:
-    output = Path("benchmark_results.csv")
-    config = BenchmarkConfig()
+    args = _parse_args(argv)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output = output_dir / "benchmark_results.csv"
+    config = BenchmarkConfig(
+        people_size=args.people_size,
+        warmup_runs=args.warmup_runs,
+        sample_runs=args.sample_runs,
+    )
     cases = [
         BenchmarkCase("filter_projection", "select name from people where age >= 12"),
+        BenchmarkCase("wide_projection", "select id, name, age, city, score from people where age >= 20 and score >= 5000 order by score"),
         BenchmarkCase("join", "select name, city_name from people join cities on city_id = id order by name"),
+        BenchmarkCase("join_filter", "select name, city_name from people join cities on city_id = id where age >= 25 and score >= 5000 order by name"),
         BenchmarkCase("aggregate", "select city, count(*) from people group by city order by city"),
+        BenchmarkCase("aggregate_filter", "select city, count(*) from people where score >= 2500 group by city order by city"),
+        BenchmarkCase("star_projection", "select * from people where age >= 30 order by score"),
     ]
     people_table = build_people_table(config.people_size)
     cities_table = build_cities_table()
@@ -137,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         writer.writeheader()
         writer.writerows(results)
 
-    report = Path("benchmark_report.md")
+    report = output_dir / "benchmark_report.md"
     report.write_text(_render_report(results), encoding="utf-8")
 
     for row in results:
@@ -146,15 +163,36 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Benchmark the query engine")
+    parser.add_argument("--people-size", type=int, default=BenchmarkConfig.people_size)
+    parser.add_argument("--warmup-runs", type=int, default=BenchmarkConfig.warmup_runs)
+    parser.add_argument("--sample-runs", type=int, default=BenchmarkConfig.sample_runs)
+    parser.add_argument("--output-dir", type=str, default="benchmark_out")
+    return parser.parse_args(argv)
+
+
 def _render_report(results: list[dict[str, object]]) -> str:
-    lines = ["# Benchmark Report", "", "| Case | Row | Sequential | Parallel | Distributed |", "| --- | ---: | ---: | ---: | ---: |"]
+    lines = [
+        "# Benchmark Report",
+        "",
+        "| Case | Row | Sequential | Parallel | Distributed | Row Speedup | Parallel Speedup | Distributed Speedup |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
     for row in results:
         lines.append(
-            f"| {row['name']} | {row['row_ms']:.3f} ms | {row['sequential_ms']:.3f} ms | {row['parallel_ms']:.3f} ms | {row['distributed_ms']:.3f} ms |"
+            f"| {row['name']} | {row['row_ms']:.3f} ms | {row['sequential_ms']:.3f} ms | {row['parallel_ms']:.3f} ms | {row['distributed_ms']:.3f} ms | "
+            f"{row['row_speedup']:.2f}x | {row['parallel_speedup']:.2f}x | {row['distributed_speedup']:.2f}x |"
         )
     lines.append("")
     lines.append("This report compares the row-based baseline with the vectorized, parallel, and distributed paths using median timings across repeated samples.")
     return "\n".join(lines)
+
+
+def _speedup(baseline_ms: float, other_ms: float) -> float:
+    if other_ms <= 0:
+        return float("inf")
+    return baseline_ms / other_ms
 
 
 if __name__ == "__main__":
