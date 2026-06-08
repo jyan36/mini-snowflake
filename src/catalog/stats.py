@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ColumnStats:
     distinct_count: int | None = None
     null_count: int | None = None
@@ -11,13 +11,13 @@ class ColumnStats:
     max_value: object | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class TableStats:
     row_count: int
     columns: dict[str, ColumnStats] = field(default_factory=dict)
 
 
-@dataclass(slots=True)
+@dataclass
 class StatsCatalog:
     tables: dict[str, TableStats] = field(default_factory=dict)
 
@@ -26,4 +26,3 @@ class StatsCatalog:
 
     def get(self, name: str) -> TableStats | None:
         return self.tables.get(name)
-

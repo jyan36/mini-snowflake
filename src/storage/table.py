@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Column:
     name: str
     values: tuple[object, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Batch:
     columns: tuple[Column, ...]
 
@@ -27,7 +27,7 @@ class Batch:
         return {column.name: column.values[index] for column in self.columns}
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Table:
     name: str
     columns: tuple[Column, ...]

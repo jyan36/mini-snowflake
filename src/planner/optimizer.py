@@ -8,7 +8,7 @@ from planner.logical import Aggregate, Filter, Join, LogicalPlan, Projection, Sc
 from sql_parser.ast import BinaryExpression, Identifier, Literal, Query, SelectItem, Star
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Optimizer:
     cost_model: CostModel = CostModel()
     stats: StatsCatalog | None = None

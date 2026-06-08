@@ -8,7 +8,7 @@ from planner import Aggregate, Filter, Join, LogicalPlan, Optimizer, Projection,
 from storage import Table
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ExecutionEngine:
     optimizer: Optimizer = Optimizer()
     scheduler: LocalScheduler = LocalScheduler()

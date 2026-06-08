@@ -5,35 +5,35 @@ from dataclasses import dataclass
 from sql_parser.ast import FunctionCall, Query
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class LogicalPlan:
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Scan(LogicalPlan):
     table: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class CtePlan(LogicalPlan):
     name: str
     plan: LogicalPlan
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Filter(LogicalPlan):
     input: LogicalPlan
     predicate: object
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Projection(LogicalPlan):
     input: LogicalPlan
     expressions: tuple[object, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Join(LogicalPlan):
     left: LogicalPlan
     right: LogicalPlan
@@ -41,20 +41,20 @@ class Join(LogicalPlan):
     strategy: str = "hash"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Aggregate(LogicalPlan):
     input: LogicalPlan
     group_by: tuple[object, ...]
     aggregates: tuple[object, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Sort(LogicalPlan):
     input: LogicalPlan
     order_by: tuple[object, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class With(LogicalPlan):
     ctes: tuple[tuple[str, LogicalPlan], ...]
     input: LogicalPlan

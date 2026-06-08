@@ -17,7 +17,7 @@ from sql_parser.ast import (
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Token:
     kind: str
     text: str

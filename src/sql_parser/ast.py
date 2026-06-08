@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Query:
     select: tuple["SelectItem", ...]
     source: "TableRef"
@@ -15,30 +15,30 @@ class Query:
     ctes: tuple["Cte", ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class SelectItem:
     expression: "Expression"
     alias: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class TableRef:
     name: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class JoinClause:
     table: "TableRef"
     condition: "Expression"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class OrderItem:
     expression: "Expression"
     descending: bool = False
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Cte:
     name: str
     query: Query
@@ -48,28 +48,28 @@ class Expression:
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Identifier(Expression):
     name: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Star(Expression):
     pass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class FunctionCall(Expression):
     name: str
     arguments: tuple[Expression, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Literal(Expression):
     value: Any
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class BinaryExpression(Expression):
     left: Expression
     operator: str

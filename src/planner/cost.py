@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from planner.logical import Aggregate, Filter, Join, LogicalPlan, Projection, Scan, Sort, With
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class CostEstimate:
     rows: float
     cpu: float
@@ -17,7 +17,7 @@ class CostEstimate:
         return self.cpu + self.io + self.network
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class CostModel:
     scan_cost: float = 1.0
     filter_cost: float = 0.25
@@ -52,4 +52,3 @@ class CostModel:
             child = self.estimate(plan.input, input_rows)
             return CostEstimate(child.rows, child.cpu, child.io)
         return CostEstimate(input_rows, input_rows, input_rows)
-

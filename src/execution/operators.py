@@ -6,7 +6,7 @@ from sql_parser.ast import BinaryExpression, FunctionCall, Identifier, Literal, 
 from storage import Batch, Column, Table
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ScanOperator:
     table: Table
 
@@ -14,7 +14,7 @@ class ScanOperator:
         return self.table.batch()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class FilterOperator:
     predicate: object
 
@@ -53,7 +53,7 @@ class FilterOperator:
         raise ValueError(f"unsupported expression {expression!r}")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ProjectionOperator:
     expressions: tuple[object, ...]
 
@@ -81,7 +81,7 @@ class ProjectionOperator:
         return Batch(tuple(columns))
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class JoinOperator:
     condition: object
     strategy: str = "hash"
@@ -126,7 +126,7 @@ class JoinOperator:
         raise ValueError(f"unsupported join expression {expression!r}")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class AggregateOperator:
     group_by: tuple[object, ...]
     aggregates: tuple[object, ...]
@@ -183,7 +183,7 @@ class AggregateOperator:
         return "expr"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class SortOperator:
     order_by: tuple[object, ...]
 

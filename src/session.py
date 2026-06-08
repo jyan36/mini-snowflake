@@ -6,7 +6,7 @@ from planner import LogicalPlanner, Optimizer
 from sql_parser import Parser
 
 
-@dataclass(slots=True)
+@dataclass
 class QuerySession:
     parser: Parser = Parser()
     planner: LogicalPlanner = LogicalPlanner()
