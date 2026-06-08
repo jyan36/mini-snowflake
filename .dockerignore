@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+.venv/
+dist/
+build/
+benchmark_out/
+benchmark_out_new/
+benchmark_out_mp_small/
+*.pyc
+.git/

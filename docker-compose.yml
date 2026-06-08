@@ -1,0 +1,9 @@
+services:
+  mini-snowflake:
+    build: .
+    working_dir: /app
+    environment:
+      PYTHONPATH: /app/src
+    command: ["python3", "benchmark.py", "--output-dir", "benchmark_out"]
+    volumes:
+      - .:/app
