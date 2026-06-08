@@ -5,6 +5,7 @@ from planner import LogicalPlanner, Optimizer
 from session import QuerySession
 from sql_parser import Parser
 from storage import from_rows
+from workload import build_demo_workload
 
 
 def main() -> None:
@@ -38,7 +39,11 @@ def main() -> None:
     for row in rows:
         print(row)
 
+    print()
+    print("WORKLOAD CASES")
+    for case in build_demo_workload():
+        print(case.name, "->", case.sql)
+
 
 if __name__ == "__main__":
     main()
-
