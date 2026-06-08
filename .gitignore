@@ -7,3 +7,4 @@ build/
 benchmark_out/
 benchmark_out_new/
 benchmark_out_mp_small/
+benchmark_out_mp_small*/

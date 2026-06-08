@@ -5,6 +5,9 @@ from typing import Any
 
 from distributed.protocol import Heartbeat, Task, TaskResult
 from distributed.transport import LocalTransport
+from execution import RowExecutor
+from planner import LogicalPlanner
+from sql_parser import Parser
 from storage import Table
 
 
@@ -42,6 +45,14 @@ class Worker:
             self.transport.send_result(result)
 
     def _execute_task(self, task: Task) -> dict[str, Any]:
+        if task.kind == "execute_sql":
+            sql = str(task.payload["sql"])
+            table_payload = task.payload.get("tables", {})
+            tables = dict(table_payload.items()) if table_payload else dict(self.tables or {})
+            query = Parser().parse(sql)
+            plan = LogicalPlanner().plan(query)
+            rows = RowExecutor().execute(plan, tables)
+            return {"rows": rows}
         if task.kind == "scan":
             table_name = str(task.payload["table"])
             table = self._require_table(table_name)
