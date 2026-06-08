@@ -7,6 +7,8 @@ from distributed.protocol import Task
 from distributed.transport import QueueTransport
 from distributed.worker import Worker
 from distributed.shuffle import ShuffleExchange
+from sql_parser import Parser
+from sql_parser.ast import BinaryExpression, FunctionCall, Identifier, Query, Star
 from storage import Batch, Column, Table, from_rows
 
 
@@ -46,6 +48,8 @@ class ProcessWorkerPool:
             return []
         if not tables:
             return self._execute_registered_query(sql)
+        query = Parser().parse(sql)
+        tables = self._prune_tables(query, tables)
         query_kind = self._query_kind(sql)
         if query_kind == "join":
             return self._execute_partitioned_query(sql, tables, partition_key="city_id", merge_rows=True)
@@ -231,6 +235,62 @@ class ProcessWorkerPool:
 
     def _tables_payload(self, tables: dict[str, Table]) -> dict[str, object]:
         return {name: table.to_payload() for name, table in tables.items()}
+
+    def _prune_tables(self, query: Query, tables: dict[str, Table]) -> dict[str, Table]:
+        required = self._required_columns(query)
+        if not required:
+            return tables
+        pruned = dict(tables)
+        for name, table in list(pruned.items()):
+            if name == "people":
+                pruned[name] = table.project(tuple(sorted(required & self._people_columns(query, table))))
+            elif name == "cities":
+                pruned[name] = table.project(tuple(sorted(required & self._city_columns(query, table))))
+        return pruned
+
+    def _required_columns(self, query: Query) -> set[str]:
+        required: set[str] = set()
+        for item in query.select:
+            required |= self._collect_expression_names(item.expression)
+        if query.where is not None:
+            required |= self._collect_expression_names(query.where)
+        for join in query.joins:
+            required |= self._collect_expression_names(join.condition)
+        for expression in query.group_by:
+            required |= self._collect_expression_names(expression)
+        for item in query.order_by:
+            required |= self._collect_expression_names(item.expression)
+        return required
+
+    def _collect_expression_names(self, expression: object) -> set[str]:
+        names: set[str] = set()
+        if isinstance(expression, Identifier):
+            names.add(expression.name)
+        elif isinstance(expression, BinaryExpression):
+            names |= self._collect_expression_names(expression.left)
+            names |= self._collect_expression_names(expression.right)
+        elif isinstance(expression, FunctionCall):
+            for argument in expression.arguments:
+                names |= self._collect_expression_names(argument)
+        elif isinstance(expression, Star):
+            names.add("*")
+        return names
+
+    def _people_columns(self, query: Query, table: Table) -> set[str]:
+        available = {column.name for column in table.columns}
+        needed = {"name", "age", "city_id", "city", "score", "segment", "id"}
+        if any(join.table.name == "cities" for join in query.joins):
+            needed.add("city_id")
+        if query.where is not None:
+            needed |= self._collect_expression_names(query.where)
+        return available & needed
+
+    def _city_columns(self, query: Query, table: Table) -> set[str]:
+        available = {column.name for column in table.columns}
+        needed = {"id", "city_name"}
+        if any(join.table.name == "people" for join in query.joins):
+            needed.add("id")
+        return available & needed
 
 
 def _worker_main(worker_id: str, transport: QueueTransport, tables: dict[str, object]) -> None:

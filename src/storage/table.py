@@ -49,6 +49,17 @@ class Table:
             batches.append(Batch(columns))
         return batches
 
+    def project(self, names: tuple[str, ...]) -> "Table":
+        if not names:
+            return Table(self.name, ())
+        selected = []
+        for name in names:
+            for column in self.columns:
+                if column.name == name:
+                    selected.append(Column(column.name, column.values))
+                    break
+        return Table(self.name, tuple(selected))
+
     def to_payload(self) -> dict[str, object]:
         return {
             "name": self.name,
