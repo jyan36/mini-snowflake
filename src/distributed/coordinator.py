@@ -13,7 +13,7 @@ class Coordinator:
     workers: dict[str, Worker] = field(default_factory=dict)
 
     def register_worker(self, worker_id: str) -> Worker:
-        worker = Worker(worker_id, self.transport)
+        worker = Worker(worker_id, self.transport, {})
         self.workers[worker_id] = worker
         return worker
 
@@ -21,6 +21,9 @@ class Coordinator:
         task = Task(f"{kind}-{len(self.transport.inbox) + len(self.transport.outbox)}", kind, payload)
         self.transport.send_task(task)
         return task
+
+    def submit_scan(self, table: str) -> Task:
+        return self.submit("scan", {"table": table})
 
     def collect(self) -> list[TaskResult]:
         results = []
@@ -35,4 +38,3 @@ class Coordinator:
         for worker in self.workers.values():
             worker.execute()
         return self.collect()
-
