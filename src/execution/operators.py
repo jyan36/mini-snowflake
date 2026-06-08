@@ -162,18 +162,17 @@ class AggregateOperator:
     aggregates: tuple[object, ...]
 
     def execute(self, batch: Batch) -> Batch:
-        groups: dict[tuple[object, ...], list[dict[str, object]]] = {}
+        groups: dict[tuple[object, ...], list[int]] = {}
         for index in range(batch.row_count):
-            row = batch.row(index)
-            key = tuple(self._evaluate(expression, row) for expression in self.group_by)
-            groups.setdefault(key, []).append(row)
+            key = tuple(self._evaluate_batch(expression, batch, index) for expression in self.group_by)
+            groups.setdefault(key, []).append(index)
         rows = []
-        for key, grouped_rows in groups.items():
+        for key, row_indexes in groups.items():
             row = {}
             for index, expression in enumerate(self.group_by):
                 row[self._name(expression)] = key[index]
             for expression in self.aggregates:
-                row[self._name(expression)] = self._aggregate(expression, grouped_rows, key)
+                row[self._name(expression)] = self._aggregate(expression, batch, row_indexes)
             rows.append(row)
         if not rows:
             return Batch(())
@@ -181,26 +180,26 @@ class AggregateOperator:
         columns = tuple(Column(name, tuple(row[name] for row in rows)) for name in names)
         return Batch(columns)
 
-    def _aggregate(self, expression: object, rows: list[dict[str, object]], key: tuple[object, ...]) -> object:
+    def _aggregate(self, expression: object, batch: Batch, row_indexes: list[int]) -> object:
         if isinstance(expression, Identifier):
-            return self._evaluate(expression, rows[0])
+            return self._evaluate_batch(expression, batch, row_indexes[0])
         if isinstance(expression, FunctionCall):
             name = expression.name.lower()
             if name == "count":
                 if expression.arguments == (Star(),):
-                    return len(rows)
-                return sum(1 for _ in rows)
+                    return len(row_indexes)
+                return sum(1 for _ in row_indexes)
             if name == "sum":
-                return sum(self._evaluate(expression.arguments[0], row) for row in rows)
+                return sum(self._evaluate_batch(expression.arguments[0], batch, index) for index in row_indexes)
             if name == "max":
-                return max(self._evaluate(expression.arguments[0], row) for row in rows)
+                return max(self._evaluate_batch(expression.arguments[0], batch, index) for index in row_indexes)
             if name == "min":
-                return min(self._evaluate(expression.arguments[0], row) for row in rows)
+                return min(self._evaluate_batch(expression.arguments[0], batch, index) for index in row_indexes)
         raise ValueError(f"unsupported aggregate {expression!r}")
 
-    def _evaluate(self, expression: object, row: dict[str, object]) -> object:
+    def _evaluate_batch(self, expression: object, batch: Batch, index: int) -> object:
         if isinstance(expression, Identifier):
-            return row[expression.name]
+            return batch.column(expression.name).values[index]
         if isinstance(expression, Literal):
             return expression.value
         raise ValueError(f"unsupported group expression {expression!r}")
