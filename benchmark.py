@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from distributed import Coordinator
-from execution import ExecutionEngine
+from execution import ExecutionEngine, RowExecutor
 from execution.scheduler import LocalScheduler
 from planner import LogicalPlanner
 from sql_parser import Parser
@@ -49,6 +49,7 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table) -> dict[str,
     query = Parser().parse(case.sql)
     plan = LogicalPlanner().plan(query)
 
+    row_executor = RowExecutor()
     sequential_engine = ExecutionEngine()
     parallel_engine = ExecutionEngine(scheduler=LocalScheduler(workers=2, batch_size=64))
     coordinator = Coordinator()
@@ -59,15 +60,18 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table) -> dict[str,
     worker_b.tables["people"] = people_table
     worker_b.tables["cities"] = cities_table
 
+    row_based = _time_call(lambda: row_executor.execute(plan, {"people": people_table, "cities": cities_table}))
     sequential = _time_call(lambda: sequential_engine.execute(plan, {"people": people_table, "cities": cities_table}))
     parallel = _time_call(lambda: parallel_engine.execute(plan, {"people": people_table, "cities": cities_table}))
     distributed = _time_call(lambda: _run_distributed(coordinator, case.sql, people_table, cities_table))
 
     return {
         "name": case.name,
+        "row_ms": row_based[0],
         "sequential_ms": sequential[0],
         "parallel_ms": parallel[0],
         "distributed_ms": distributed[0],
+        "row_rows": len(row_based[1]),
         "sequential_rows": len(sequential[1]),
         "parallel_rows": len(parallel[1]),
         "distributed_rows": len(distributed[1]),
@@ -113,12 +117,25 @@ def main(argv: list[str] | None = None) -> int:
         writer.writeheader()
         writer.writerows(results)
 
+    report = Path("benchmark_report.md")
+    report.write_text(_render_report(results), encoding="utf-8")
+
     for row in results:
         print(row)
 
     return 0
 
 
+def _render_report(results: list[dict[str, object]]) -> str:
+    lines = ["# Benchmark Report", "", "| Case | Row | Sequential | Parallel | Distributed |", "| --- | ---: | ---: | ---: | ---: |"]
+    for row in results:
+        lines.append(
+            f"| {row['name']} | {row['row_ms']:.3f} ms | {row['sequential_ms']:.3f} ms | {row['parallel_ms']:.3f} ms | {row['distributed_ms']:.3f} ms |"
+        )
+    lines.append("")
+    lines.append("This report compares the row-based baseline with the vectorized, parallel, and distributed paths.")
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-
