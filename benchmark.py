@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import statistics
 import sys
 import time
 from dataclasses import dataclass
@@ -20,7 +21,14 @@ class BenchmarkCase:
     sql: str
 
 
-def build_people_table(size: int = 1000):
+@dataclass(frozen=True)
+class BenchmarkConfig:
+    people_size: int = 50_000
+    warmup_runs: int = 1
+    sample_runs: int = 5
+
+
+def build_people_table(size: int = 50_000):
     rows = []
     for index in range(size):
         rows.append(
@@ -45,7 +53,8 @@ def build_cities_table():
     )
 
 
-def benchmark_case(case: BenchmarkCase, people_table, cities_table) -> dict[str, object]:
+def benchmark_case(case: BenchmarkCase, people_table, cities_table, config: BenchmarkConfig | None = None) -> dict[str, object]:
+    config = config or BenchmarkConfig()
     query = Parser().parse(case.sql)
     plan = LogicalPlanner().plan(query)
 
@@ -60,10 +69,10 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table) -> dict[str,
     worker_b.tables["people"] = people_table
     worker_b.tables["cities"] = cities_table
 
-    row_based = _time_call(lambda: row_executor.execute(plan, {"people": people_table, "cities": cities_table}))
-    sequential = _time_call(lambda: sequential_engine.execute(plan, {"people": people_table, "cities": cities_table}))
-    parallel = _time_call(lambda: parallel_engine.execute(plan, {"people": people_table, "cities": cities_table}))
-    distributed = _time_call(lambda: _run_distributed(coordinator, case.sql, people_table, cities_table))
+    row_based = _measure(lambda: row_executor.execute(plan, {"people": people_table, "cities": cities_table}), config)
+    sequential = _measure(lambda: sequential_engine.execute(plan, {"people": people_table, "cities": cities_table}), config)
+    parallel = _measure(lambda: parallel_engine.execute(plan, {"people": people_table, "cities": cities_table}), config)
+    distributed = _measure(lambda: _run_distributed(coordinator, case.sql, people_table, cities_table), config)
 
     return {
         "name": case.name,
@@ -71,10 +80,10 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table) -> dict[str,
         "sequential_ms": sequential[0],
         "parallel_ms": parallel[0],
         "distributed_ms": distributed[0],
-        "row_rows": len(row_based[1]),
-        "sequential_rows": len(sequential[1]),
-        "parallel_rows": len(parallel[1]),
-        "distributed_rows": len(distributed[1]),
+        "row_rows": row_based[1],
+        "sequential_rows": sequential[1],
+        "parallel_rows": parallel[1],
+        "distributed_rows": distributed[1],
     }
 
 
@@ -94,6 +103,16 @@ def _run_distributed(coordinator: Coordinator, sql: str, people_table, cities_ta
     return ExecutionEngine().execute(LogicalPlanner().plan(query), {"people": people_table, "cities": cities_table})
 
 
+def _measure(fn, config: BenchmarkConfig):
+    for _ in range(config.warmup_runs):
+        result = fn()
+    samples = []
+    for _ in range(config.sample_runs):
+        elapsed_ms, result = _time_call(fn)
+        samples.append(elapsed_ms)
+    return statistics.median(samples), len(result)
+
+
 def _time_call(fn):
     start = time.perf_counter()
     result = fn()
@@ -103,15 +122,16 @@ def _time_call(fn):
 
 def main(argv: list[str] | None = None) -> int:
     output = Path("benchmark_results.csv")
+    config = BenchmarkConfig()
     cases = [
         BenchmarkCase("filter_projection", "select name from people where age >= 12"),
         BenchmarkCase("join", "select name, city_name from people join cities on city_id = id order by name"),
         BenchmarkCase("aggregate", "select city, count(*) from people group by city order by city"),
     ]
-    people_table = build_people_table()
+    people_table = build_people_table(config.people_size)
     cities_table = build_cities_table()
 
-    results = [benchmark_case(case, people_table, cities_table) for case in cases]
+    results = [benchmark_case(case, people_table, cities_table, config) for case in cases]
     with output.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(results[0].keys()))
         writer.writeheader()
@@ -133,7 +153,7 @@ def _render_report(results: list[dict[str, object]]) -> str:
             f"| {row['name']} | {row['row_ms']:.3f} ms | {row['sequential_ms']:.3f} ms | {row['parallel_ms']:.3f} ms | {row['distributed_ms']:.3f} ms |"
         )
     lines.append("")
-    lines.append("This report compares the row-based baseline with the vectorized, parallel, and distributed paths.")
+    lines.append("This report compares the row-based baseline with the vectorized, parallel, and distributed paths using median timings across repeated samples.")
     return "\n".join(lines)
 
 
