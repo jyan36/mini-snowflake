@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from catalog import StatsCatalog
 from planner.cost import CostModel
 from planner.logical import Aggregate, Filter, Join, LogicalPlan, Projection, Scan, Sort, With
-from sql_parser.ast import BinaryExpression, Identifier, Literal, Query, SelectItem, Star
+from sql_parser.ast import BinaryExpression, FunctionCall, Identifier, Literal, Query, SelectItem, Star
 
 
 @dataclass(frozen=True)
@@ -46,11 +46,9 @@ class Optimizer:
             return Filter(self._pushdown_projection(input_plan.input, inner_required), input_plan.predicate)
         if isinstance(input_plan, Join):
             join_required = required | self._required_columns((input_plan.condition,))
-            left_required = self._required_columns_for_branch(input_plan.left, join_required)
-            right_required = self._required_columns_for_branch(input_plan.right, join_required)
             return Join(
-                self._pushdown_projection(input_plan.left, left_required),
-                self._pushdown_projection(input_plan.right, right_required),
+                self._pushdown_projection(input_plan.left, join_required),
+                self._pushdown_projection(input_plan.right, join_required),
                 input_plan.condition,
                 input_plan.strategy,
             )
@@ -60,8 +58,6 @@ class Optimizer:
         if isinstance(input_plan, Sort):
             inner_required = required | self._required_columns(input_plan.order_by)
             return Sort(self._pushdown_projection(input_plan.input, inner_required), input_plan.order_by)
-        if isinstance(input_plan, Scan):
-            return Projection(input_plan, tuple(Identifier(name) for name in sorted(required)))
         return input_plan
 
     def _pushdown_filter(self, input_plan: LogicalPlan, predicate: object) -> LogicalPlan:
