@@ -1,6 +1,7 @@
 import unittest
 
 from distributed import Coordinator, LocalTransport, Task, TaskResult, Worker
+from storage import from_rows
 
 
 class DistributedProtocolTest(unittest.TestCase):
@@ -8,6 +9,7 @@ class DistributedProtocolTest(unittest.TestCase):
         transport = LocalTransport()
         coordinator = Coordinator(transport=transport)
         worker = coordinator.register_worker("worker-1")
+        worker.tables["people"] = from_rows("people", [{"name": "alice"}])
 
         coordinator.submit("scan", {"table": "people"})
         result = worker.execute()
@@ -20,4 +22,3 @@ class DistributedProtocolTest(unittest.TestCase):
         transport = LocalTransport()
         worker = Worker("worker-1", transport)
         self.assertIsNone(worker.poll())
-

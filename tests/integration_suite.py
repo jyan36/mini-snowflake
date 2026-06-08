@@ -1,6 +1,14 @@
 import unittest
 
-from tests import test_integration, test_query_matrix, test_sql_features
+from tests import (
+    test_distributed_execution,
+    test_distributed_queries,
+    test_distributed_protocol,
+    test_distributed_shuffle,
+    test_integration,
+    test_query_matrix,
+    test_sql_features,
+)
 
 
 def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: str | None):  # noqa: D401
@@ -9,7 +17,10 @@ def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: 
         test_sql_features,
         test_integration,
         test_query_matrix,
+        test_distributed_protocol,
+        test_distributed_execution,
+        test_distributed_shuffle,
+        test_distributed_queries,
     ):
         suite.addTests(loader.loadTestsFromModule(module))
     return suite
-
