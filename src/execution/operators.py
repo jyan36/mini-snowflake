@@ -87,17 +87,47 @@ class JoinOperator:
     strategy: str = "hash"
 
     def execute(self, left: Batch, right: Batch) -> Batch:
-        rows = []
-        for left_index in range(left.row_count):
-            for right_index in range(right.row_count):
-                combined = {**left.row(left_index), **right.row(right_index)}
-                if self._evaluate(self.condition, combined):
-                    rows.append(combined)
+        rows = self._hash_join(left, right)
+        if rows is None:
+            rows = []
+            for left_index in range(left.row_count):
+                left_row = left.row(left_index)
+                for right_index in range(right.row_count):
+                    combined = {**left_row, **right.row(right_index)}
+                    if self._evaluate(self.condition, combined):
+                        rows.append(combined)
         if not rows:
             return Batch(())
         names = tuple(rows[0].keys())
         columns = tuple(Column(name, tuple(row[name] for row in rows)) for name in names)
         return Batch(columns)
+
+    def _hash_join(self, left: Batch, right: Batch) -> list[dict[str, object]] | None:
+        keys = self._join_keys(self.condition)
+        if keys is None:
+            return None
+        left_key, right_key = keys
+        if left.row_count == 0 or right.row_count == 0:
+            return []
+        left_rows = [left.row(index) for index in range(left.row_count)]
+        right_rows = [right.row(index) for index in range(right.row_count)]
+        if len(left_rows) > len(right_rows):
+            left_rows, right_rows = right_rows, left_rows
+            left_key, right_key = right_key, left_key
+        hash_table: dict[object, list[dict[str, object]]] = {}
+        for row in left_rows:
+            hash_table.setdefault(row[left_key], []).append(row)
+        rows = []
+        for row in right_rows:
+            for left_row in hash_table.get(row[right_key], []):
+                rows.append({**left_row, **row})
+        return rows
+
+    def _join_keys(self, expression: object) -> tuple[str, str] | None:
+        if isinstance(expression, BinaryExpression) and expression.operator == "=":
+            if isinstance(expression.left, Identifier) and isinstance(expression.right, Identifier):
+                return expression.left.name, expression.right.name
+        return None
 
     def _evaluate(self, expression: object, row: dict[str, object]) -> object:
         if isinstance(expression, Identifier):
