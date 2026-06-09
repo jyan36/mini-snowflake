@@ -80,7 +80,7 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table, config: Benc
     sequential = _measure(lambda: sequential_engine.execute(plan, {"people": people_table, "cities": cities_table}), config)
     parallel = _measure(lambda: parallel_engine.execute(plan, {"people": people_table, "cities": cities_table}), config)
     distributed = _measure(lambda: _run_distributed(coordinator, case.sql, people_table, cities_table), config)
-    process_distributed = _measure(lambda: _run_distributed_process_pool(process_pool, case.sql, people_table, cities_table), config)
+    process_distributed = _measure(lambda: _run_distributed_process_pool(process_pool, case.sql), config)
     process_pool.stop_all()
 
     return {
@@ -118,8 +118,8 @@ def _run_distributed(coordinator: Coordinator, sql: str, people_table, cities_ta
     return ExecutionEngine().execute(LogicalPlanner().plan(query), {"people": people_table, "cities": cities_table})
 
 
-def _run_distributed_process_pool(process_pool: ProcessWorkerPool, sql: str, people_table, cities_table):
-    return process_pool.execute_query(sql, {"people": people_table, "cities": cities_table})
+def _run_distributed_process_pool(process_pool: ProcessWorkerPool, sql: str):
+    return process_pool.execute_query(sql, {})
 
 
 def _measure(fn, config: BenchmarkConfig):
