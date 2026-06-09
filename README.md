@@ -53,20 +53,6 @@ PYTHONPATH=src python3 -m unittest discover -s tests -q
 - It also writes `benchmark_report.md`
 - The report compares row-based, vectorized, parallel, and distributed runs
 
-# My Benchmark Results
-
-# Benchmark Report
-
-| Case | Row | Vectorized Sequential | Parallel | Distributed | Vectorized Sequential Speedup | Parallel Speedup | Distributed Speedup |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| filter_projection | 86.932 ms | 50.753 ms | 90.973 ms | 76.707 ms | 1.71x | 0.96x | 1.13x |
-| wide_projection | 129.017 ms | 121.935 ms | 149.892 ms | 148.181 ms | 1.06x | 0.86x | 0.87x |
-| join | 179.928 ms | 150.685 ms | 170.857 ms | 136.826 ms | 1.19x | 1.05x | 1.32x |
-| join_filter | 176.237 ms | 175.544 ms | 239.734 ms | 158.990 ms | 1.00x | 0.74x | 1.11x |
-| aggregate | 93.747 ms | 41.205 ms | 136.158 ms | 56.598 ms | 2.28x | 0.69x | 1.66x |
-| aggregate_filter | 108.889 ms | 76.645 ms | 158.956 ms | 82.546 ms | 1.42x | 0.69x | 1.32x |
-| star_projection | 113.814 ms | 159.692 ms | 192.820 ms | 124.352 ms | 0.71x | 0.59x | 0.92x |
-
 ## Notes
 
 - The project is a showcase prototype, not a production SQL engine
