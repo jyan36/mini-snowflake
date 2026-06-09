@@ -33,26 +33,6 @@ python3 examples/failure_demo.py
 python3 benchmark.py
 ```
 
-## Docker
-
-Build the image:
-
-```bash
-docker build -t mini-snowflake .
-```
-
-Run the benchmark:
-
-```bash
-docker run --rm mini-snowflake
-```
-
-Or use compose:
-
-```bash
-docker compose run --rm mini-snowflake
-```
-
 ## Test
 
 ```bash
@@ -72,10 +52,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -q
 - `benchmark.py` writes `benchmark_results.csv`
 - It also writes `benchmark_report.md`
 - The report compares row-based, vectorized, parallel, and distributed runs
-
 ## Notes
 
 - The project is a showcase prototype, not a production SQL engine
 - The distributed layer uses a local transport for now
 - The benchmark numbers depend on your local machine and Python runtime
-- Docker helps you run the same benchmark and worker setup in a repeatable environment, but it does not by itself make queries faster
