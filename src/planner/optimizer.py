@@ -61,10 +61,22 @@ class Optimizer:
         return input_plan
 
     def _pushdown_filter(self, input_plan: LogicalPlan, predicate: object) -> LogicalPlan:
+        if isinstance(input_plan, Filter):
+            return Filter(self._pushdown_filter(input_plan.input, predicate), input_plan.predicate)
         if isinstance(input_plan, Projection):
             return Projection(self._pushdown_filter(input_plan.input, predicate), input_plan.expressions)
         if isinstance(input_plan, Join):
-            return Filter(input_plan, predicate)
+            left_required = self._required_columns((predicate, input_plan.condition))
+            right_required = set(left_required)
+            return Filter(
+                Join(
+                    self._pushdown_projection(input_plan.left, left_required),
+                    self._pushdown_projection(input_plan.right, right_required),
+                    input_plan.condition,
+                    input_plan.strategy,
+                ),
+                predicate,
+            )
         return Filter(input_plan, predicate)
 
     def _required_columns(self, expressions: tuple[object, ...]) -> set[str]:

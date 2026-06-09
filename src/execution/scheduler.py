@@ -15,9 +15,7 @@ class LocalScheduler:
         batches = table.partitioned_batches(self.batch_size)
         if self.workers == 1 or len(batches) <= 1:
             return self._merge_batches(batches)
-        with ThreadPoolExecutor(max_workers=self.workers) as pool:
-            results = list(pool.map(lambda batch: batch, batches))
-        return self._merge_batches(results)
+        return self._merge_batches(batches)
 
     def join(self, left: Batch, right: Batch, condition: object) -> Batch:
         key_pair = self._join_keys(condition)
@@ -26,7 +24,15 @@ class LocalScheduler:
 
             return JoinOperator(condition).execute(left, right)
         left_key, right_key = key_pair
-        partitions = max(1, min(self.workers, left.row_count or 1, right.row_count or 1))
+        if left.row_count <= self.batch_size or right.row_count <= self.batch_size:
+            from execution.operators import JoinOperator
+
+            return JoinOperator(condition).execute(left, right)
+        if min(left.row_count, right.row_count) <= self.batch_size * 4:
+            from execution.operators import JoinOperator
+
+            return JoinOperator(condition).execute(left, right)
+        partitions = self._operator_partitions(left.row_count, right.row_count)
         left_rows = [left.row(i) for i in range(left.row_count)]
         right_rows = [right.row(i) for i in range(right.row_count)]
         left_parts = self._partition_rows(left_rows, left_key, partitions)
@@ -47,7 +53,7 @@ class LocalScheduler:
             from execution.operators import AggregateOperator
 
             return AggregateOperator(group_by, aggregates).execute(batch)
-        partitions = max(1, min(self.workers, len(rows)))
+        partitions = self._operator_partitions(len(rows))
         buckets = self._partition_aggregate_rows(rows, partitions, group_by)
         with ThreadPoolExecutor(max_workers=self.workers) as pool:
             partials = list(pool.map(lambda bucket: self._aggregate_bucket(bucket, group_by, aggregates), buckets))
@@ -65,6 +71,12 @@ class LocalScheduler:
             values = tuple(value for batch in batches for value in batch.columns[index].values)
             columns.append(batches[0].columns[index].__class__(name, values))
         return Batch(tuple(columns))
+
+    def _operator_partitions(self, *sizes: int) -> int:
+        if not sizes:
+            return 1
+        candidate = min(max(1, size // self.batch_size) for size in sizes)
+        return max(1, min(self.workers, candidate))
 
     def _join_keys(self, condition: object) -> tuple[str, str] | None:
         if isinstance(condition, BinaryExpression) and condition.operator == "=":

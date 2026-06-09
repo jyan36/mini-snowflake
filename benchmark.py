@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from distributed import Coordinator, ProcessWorkerPool, ShuffleExchange
+from distributed import Coordinator, ShuffleExchange
 from execution import ExecutionEngine, RowExecutor
 from execution.scheduler import LocalScheduler
 from planner import LogicalPlanner
@@ -71,17 +71,10 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table, config: Benc
     worker_a.tables["cities"] = cities_table
     worker_b.tables["people"] = people_table
     worker_b.tables["cities"] = cities_table
-    process_pool = ProcessWorkerPool()
-    process_worker_tables = _partition_worker_tables(people_table, cities_table, workers=2)
-    for worker_id, tables in process_worker_tables.items():
-        process_pool.add_worker(worker_id, tables)
-
     row_based = _measure(lambda: row_executor.execute(plan, {"people": people_table, "cities": cities_table}), config)
     sequential = _measure(lambda: sequential_engine.execute(plan, {"people": people_table, "cities": cities_table}), config)
     parallel = _measure(lambda: parallel_engine.execute(plan, {"people": people_table, "cities": cities_table}), config)
     distributed = _measure(lambda: _run_distributed(coordinator, case.sql, people_table, cities_table), config)
-    process_distributed = _measure(lambda: _run_distributed_process_pool(process_pool, case.sql), config)
-    process_pool.stop_all()
 
     return {
         "name": case.name,
@@ -89,37 +82,18 @@ def benchmark_case(case: BenchmarkCase, people_table, cities_table, config: Benc
         "sequential_ms": sequential[0],
         "parallel_ms": parallel[0],
         "distributed_ms": distributed[0],
-        "process_distributed_ms": process_distributed[0],
         "row_speedup": _speedup(row_based[0], sequential[0]),
         "parallel_speedup": _speedup(row_based[0], parallel[0]),
         "distributed_speedup": _speedup(row_based[0], distributed[0]),
-        "process_distributed_speedup": _speedup(row_based[0], process_distributed[0]),
         "row_rows": row_based[1],
         "sequential_rows": sequential[1],
         "parallel_rows": parallel[1],
         "distributed_rows": distributed[1],
-        "process_distributed_rows": process_distributed[1],
     }
 
 
 def _run_distributed(coordinator: Coordinator, sql: str, people_table, cities_table):
-    query = Parser().parse(sql)
-    if "join" in sql.lower():
-        rows = coordinator.distributed_join(
-            [people_table.batch().row(i) for i in range(people_table.batch().row_count)],
-            [cities_table.batch().row(i) for i in range(cities_table.batch().row_count)],
-            "city_id",
-            "id",
-        )
-        return rows
-    if "count(*)" in sql.lower():
-        rows = [people_table.batch().row(i) for i in range(people_table.batch().row_count)]
-        return coordinator.distributed_count(rows, "city")
-    return ExecutionEngine().execute(LogicalPlanner().plan(query), {"people": people_table, "cities": cities_table})
-
-
-def _run_distributed_process_pool(process_pool: ProcessWorkerPool, sql: str):
-    return process_pool.execute_query(sql, {})
+    return coordinator.distributed_query(sql, {"people": people_table, "cities": cities_table})
 
 
 def _measure(fn, config: BenchmarkConfig):
@@ -189,7 +163,7 @@ def _render_report(results: list[dict[str, object]]) -> str:
     lines = [
         "# Benchmark Report",
         "",
-        "| Case | Row | Sequential | Parallel | Distributed | Row Speedup | Parallel Speedup | Distributed Speedup |",
+        "| Case | Row | Vectorized Sequential | Parallel | Distributed | Vectorized Sequential Speedup | Parallel Speedup | Distributed Speedup |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in results:
@@ -198,7 +172,7 @@ def _render_report(results: list[dict[str, object]]) -> str:
             f"{row['row_speedup']:.2f}x | {row['parallel_speedup']:.2f}x | {row['distributed_speedup']:.2f}x |"
         )
     lines.append("")
-    lines.append("This report compares the row-based baseline with the vectorized, parallel, and distributed paths using median timings across repeated samples.")
+    lines.append("This report compares row execution with vectorized sequential, parallel, and distributed paths using median timings across repeated samples.")
     return "\n".join(lines)
 
 
@@ -206,27 +180,6 @@ def _speedup(baseline_ms: float, other_ms: float) -> float:
     if other_ms <= 0:
         return float("inf")
     return baseline_ms / other_ms
-
-
-def _partition_worker_tables(people_table: Table, cities_table: Table, workers: int) -> dict[str, dict[str, Table]]:
-    exchange = ShuffleExchange(partitions=max(1, workers))
-    people_partitions = exchange.partition(people_table.batch(), "city_id")
-    tables: dict[str, dict[str, Table]] = {}
-    for index in range(workers):
-        people_partition = people_partitions[index % len(people_partitions)]
-        tables[f"worker-{chr(ord('a') + index)}"] = {
-            "people": _rows_to_table("people", people_partition.rows, people_table),
-            "cities": cities_table,
-        }
-    return tables
-
-
-def _rows_to_table(name: str, rows: list[dict[str, object]], source: Table) -> Table:
-    if rows:
-        return from_rows(name, rows)
-    from storage import Column
-
-    return Table(name, tuple(Column(column.name, tuple()) for column in source.columns))
 
 
 if __name__ == "__main__":
